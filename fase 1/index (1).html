@@ -1,0 +1,430 @@
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <script type="text/javascript" src="js/gl-matrix-2.4.0.min.js">
+  </script>
+  <script type="text/javascript" src="js/jquery-3.2.1.min.js">
+  </script>
+  <script type="text/javascript" src="js/webgl-utils.js">
+  </script>
+  <script>
+    // Iniciar o ambiente quando a página for 
+    // carregada
+    var mMatrix = mat4.create();
+    var vMatrix = mat4.create();
+    var pMatrix = mat4.create();
+
+    var triangleVertexPositionBuffer;
+    var triangleVertexColorBuffer;
+
+    var squareVertexPositionBuffer;
+    var squareVertexColorBuffer;
+
+    var square2VertexPositionBuffer;
+    var square2VertexColorBuffer;
+
+    var pernaVertexPositionBuffer;
+    var pernaVertexColorBuffer;
+    
+    var ombroVertexPositionBuffer;
+    var ombroVertexColorBuffer;
+    var braçoVertexPositionBuffer;
+    var braçoVertexColorBuffer;
+
+    $(function () {
+      iniciaWebGL();
+    });
+    function iniciaWebGL() {
+      var canvas = $('#canvas-webgl')[0];
+      iniciarGL(canvas); // Definir como um canvas 3D
+      iniciarShaders();  // Obter e processar os Shaders
+      iniciarBuffers();  // Enviar o triângulo e quadrado na GPU
+      iniciarAmbiente(); // Definir background e cor do objeto
+      desenharCena();    // Usar os itens anteriores e desenhar
+      tick();  
+      document.onkeydown = eventoTeclaPress;
+      document.onkeyup = eventoTeclaSolta;
+    }
+    function iniciarGL(canvas) {
+      try {
+        gl = canvas.getContext("webgl") ||
+          canvas.getContext("experimental-webgl");
+        gl.viewportWidth = canvas.width;
+        gl.viewportHeight = canvas.height;
+      }
+      catch (e) {
+        if (!gl)
+          alert("Não pode inicializar WebGL, desculpe");
+      }
+    }
+
+    var shaderProgram;
+    function iniciarShaders() {
+      var vertexShader = getShader(gl, "#shader-vs");
+      var fragmentShader = getShader(gl, "#shader-fs");
+
+      shaderProgram = gl.createProgram();
+      gl.attachShader(shaderProgram, vertexShader);
+      gl.attachShader(shaderProgram, fragmentShader);
+      gl.linkProgram(shaderProgram);
+
+      if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+        alert("Não pode inicializar shaders");
+      }
+
+      gl.useProgram(shaderProgram);
+
+      shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+      gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+      shaderProgram.vertexColorAttribute = gl.getAttribLocation(shaderProgram, "aVertexColor");
+      gl.enableVertexAttribArray(shaderProgram.vertexColorAttribute);
+
+      shaderProgram.pMatrixUniform = gl.getUniformLocation(shaderProgram,
+        "uPMatrix");
+      shaderProgram.vMatrixUniform = gl.getUniformLocation(shaderProgram,
+        "uVMatrix");
+      shaderProgram.mMatrixUniform = gl.getUniformLocation(shaderProgram,
+        "uMMatrix");
+
+
+    }
+
+    function getShader(gl, id) {
+      var shaderScript = $(id)[0];
+      if (!shaderScript) {
+        return null;
+      }
+
+      var str = "";
+      var k = shaderScript.firstChild;
+      while (k) {
+        if (k.nodeType == 3)
+          str += k.textContent;
+        k = k.nextSibling;
+      }
+
+      var shader;
+      if (shaderScript.type == "x-shader/x-fragment") {
+        shader = gl.createShader(gl.FRAGMENT_SHADER);
+      }
+      else if (shaderScript.type == "x-shader/x-vertex") {
+        shader = gl.createShader(gl.VERTEX_SHADER);
+      }
+      else {
+        return null;
+      }
+
+      gl.shaderSource(shader, str);
+      gl.compileShader(shader);
+
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        alert(gl.getShaderInfoLog(shader));
+        return null;
+      }
+
+      return shader;
+    }
+    function iniciarBuffers() {
+      triangleVertexPositionBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, triangleVertexPositionBuffer);
+      var vertices = [
+        0.0, -2.0, 0.0,
+        -1.0, -1.0, 0.0,
+        1.0, -1.0, 0.0
+      ];
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+      triangleVertexPositionBuffer.itemSize = 3;
+      triangleVertexPositionBuffer.numItems = 3;
+      triangleVertexColorBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, triangleVertexColorBuffer);
+      var cores = [
+        255, 0, 0, 100.0
+      ];
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cores), gl.STATIC_DRAW);
+      triangleVertexColorBuffer.itemSize = 4;
+      triangleVertexColorBuffer.numItems = 3;
+
+      squareVertexPositionBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexPositionBuffer);
+      vertices = [
+        2.0, 1.0, 0.0,
+        -1.0, 1.0, 0.0,
+        2.0, -1.0, 0.0,
+        -1.0, -1.0, 0.0
+      ];
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+      squareVertexPositionBuffer.itemSize = 3;
+      squareVertexPositionBuffer.numItems = 4;
+      squareVertexColorBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexColorBuffer);
+      cores = []
+      for (var i = 0; i < 4; i++) {
+        cores = cores.concat([0, 255, 0, 1.0]);
+      }
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cores), gl.STATIC_DRAW);
+      squareVertexColorBuffer.itemSize = 4;
+      squareVertexColorBuffer.numItems = 4;
+
+      //desenhar quadrados
+      square2VertexPositionBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, square2VertexPositionBuffer);
+      vertices = [
+        2.0, 1.0, 0.0,
+        -1.0, 1.0, 0.0,
+        2.0, -1.0, 0.0,
+        -1.0, -1.0, 0.0
+      ];
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+      square2VertexPositionBuffer.itemSize = 3;
+      square2VertexPositionBuffer.numItems = 4;
+      square2VertexColorBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, square2VertexColorBuffer);
+      cores = []
+      for (var i = 0; i < 4; i++) {
+        cores = cores.concat([139, 0, 139, 1.0]);
+      }
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cores), gl.STATIC_DRAW);
+      square2VertexColorBuffer.itemSize = 4;
+      square2VertexColorBuffer.numItems = 4;
+
+      //desenhar as pernas
+      pernasVertexPositionBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, pernasVertexPositionBuffer);
+      vertices = [
+        0.0, 0.0, 0.0,
+        -1.0, 1.0, 0.0,
+        0.0, -1.0, 0.0,
+        -1.0, -1.0, 0.0
+      ];
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+      pernasVertexPositionBuffer.itemSize = 3;
+      pernasVertexPositionBuffer.numItems = 4;
+      pernasVertexColorBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, pernasVertexColorBuffer);
+      cores = []
+      for (var i = 0; i < 4; i++) {
+        cores = cores.concat([0, 191, 255, 1.0]);
+      }
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cores), gl.STATIC_DRAW);
+      pernasVertexColorBuffer.itemSize = 4;
+      pernasVertexColorBuffer.numItems = 4;
+
+      //desenhar pernas 2
+      pernas2VertexPositionBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, pernas2VertexPositionBuffer);
+      vertices = [
+        -1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,
+        -1.0, -1.0, 0.0,
+        0.0, -1.0, 0.0
+      ];
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+      pernas2VertexPositionBuffer.itemSize = 3;
+      pernas2VertexPositionBuffer.numItems = 4;
+      pernas2VertexColorBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, pernas2VertexColorBuffer);
+      cores = []
+      for (var i = 0; i < 4; i++) {
+        cores = cores.concat([0, 191, 255, 1.0]);
+      }
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cores), gl.STATIC_DRAW);
+      pernas2VertexColorBuffer.itemSize = 4;
+      pernas2VertexColorBuffer.numItems = 4;
+      //ombro
+      ombroVertexPositionBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, ombroVertexPositionBuffer);
+      vertices = [
+      1.0, 1.0, 0.0,
+        -1.0, 1.0, 0.0,
+        1.0, -1.0, 0.0,
+        -1.0, -1.0, 0.0
+      ];
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+      ombroVertexPositionBuffer.itemSize = 3;
+      ombroVertexPositionBuffer.numItems = 4;
+      ombroVertexColorBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, ombroVertexColorBuffer);
+      cores = []
+      for (var i = 0; i < 4; i++) {
+        cores = cores.concat([255,165,0, 2.0]);
+      }
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cores), gl.STATIC_DRAW);
+      ombroVertexColorBuffer.itemSize = 4;
+      ombroVertexColorBuffer.numItems = 4;
+      //braço
+      braçoVertexPositionBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, braçoVertexPositionBuffer);
+      vertices = [
+      0.5, 1.0, 0.0,
+        -1.0, 1.0, 0.0,
+        0.5, -3.0, 0.0,
+        -1.0, -3.0, 0.0
+      ];
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+      braçoVertexPositionBuffer.itemSize = 3;
+      braçoVertexPositionBuffer.numItems = 4;
+      braçoVertexColorBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, braçoVertexColorBuffer);
+      cores = []
+      for (var i = 0; i < 4; i++) {
+        cores = cores.concat([173,255,47, 1.0]);
+      }
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cores), gl.STATIC_DRAW);
+      braçoVertexColorBuffer.itemSize = 4;
+      braçoVertexColorBuffer.numItems = 4;
+    }
+    function iniciarAmbiente() {
+      gl.clearColor(0.0, 0.0, 0.0, 1.0);
+      gl.enable(gl.DEPTH_TEST);
+    }
+    function desenharCena() {
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      mat4.perspective(pMatrix, 45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0);
+      mat4.identity(mMatrix);
+      mat4.identity(vMatrix);
+
+      // Desenhando Triângulo
+      
+     
+      mat4.translate(mMatrix, mMatrix, [0.8, 0.6, -9.0]);
+      gl.bindBuffer(gl.ARRAY_BUFFER, triangleVertexPositionBuffer);
+      gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, triangleVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, triangleVertexColorBuffer);
+      gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, triangleVertexColorBuffer.itemSize, gl.FLOAT, false, 0, 0);
+      setMatrixUniforms();
+      gl.drawArrays(gl.TRIANGLES, 0, triangleVertexPositionBuffer.numItems);
+
+      // Desenhando a cabeça
+      
+      mat4.translate(mMatrix, mMatrix, [0.0, 3.5, -5.0]);
+      gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexPositionBuffer);
+      gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, squareVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexColorBuffer);
+      gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, squareVertexColorBuffer.itemSize, gl.FLOAT, false, 0, 0);
+      setMatrixUniforms();
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, squareVertexPositionBuffer.numItems);
+
+      //desenhando meio
+      
+      mat4.translate(mMatrix, mMatrix, [-1.6, -1.55, -2.0]);
+      gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexPositionBuffer);
+      gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, squareVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexColorBuffer);
+      gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, squareVertexColorBuffer.itemSize, gl.FLOAT, false, 0, 0);
+      setMatrixUniforms();
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, squareVertexPositionBuffer.numItems);
+      //meio 2
+     
+      mat4.translate(mMatrix, mMatrix,[ 3.045, 0.0, 0.0]);
+      gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexPositionBuffer);
+      gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, squareVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexColorBuffer);
+      gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, squareVertexColorBuffer.itemSize, gl.FLOAT, false, 0, 0);
+      setMatrixUniforms();
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, squareVertexPositionBuffer.numItems);
+      //desenhando a barriga
+      
+      mat4.translate(mMatrix, mMatrix, [-1.5, -2.2, 2.0]);
+      gl.bindBuffer(gl.ARRAY_BUFFER, square2VertexPositionBuffer);
+      gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, square2VertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, square2VertexColorBuffer);
+      gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, square2VertexColorBuffer.itemSize, gl.FLOAT, false, 0, 0);
+      setMatrixUniforms();
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, square2VertexPositionBuffer.numItems);
+      //desenhar pernas
+  
+      mat4.translate(mMatrix, mMatrix, [0.1, -1.8, 4.0]);
+      gl.bindBuffer(gl.ARRAY_BUFFER, pernasVertexPositionBuffer);
+      gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, pernasVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, pernasVertexColorBuffer);
+      gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, pernasVertexColorBuffer.itemSize, gl.FLOAT, false, 0, 0);
+      setMatrixUniforms();
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, pernasVertexPositionBuffer.numItems);
+      //desenhar pernas2
+      
+      mat4.translate(mMatrix, mMatrix, [1.1,0.0,0.0]);
+      gl.bindBuffer(gl.ARRAY_BUFFER, pernas2VertexPositionBuffer);
+      gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, pernas2VertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, pernas2VertexColorBuffer);
+      gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, pernas2VertexColorBuffer.itemSize, gl.FLOAT, false, 0, 0);
+      setMatrixUniforms();
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, pernas2VertexPositionBuffer.numItems);
+      //desenhar ombro
+      mat4.translate(mMatrix, mMatrix, [3.1,4.5,-5.0]);
+      gl.bindBuffer(gl.ARRAY_BUFFER, ombroVertexPositionBuffer);
+      gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, ombroVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, ombroVertexColorBuffer);
+      gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, ombroVertexColorBuffer.itemSize, gl.FLOAT, false, 0, 0);
+      setMatrixUniforms();
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, ombroVertexPositionBuffer.numItems);
+      //desenhar ombro 2
+      mat4.translate(mMatrix, mMatrix, [-7.8,0.0,0.0]);
+      gl.bindBuffer(gl.ARRAY_BUFFER, ombroVertexPositionBuffer);
+      gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, ombroVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, ombroVertexColorBuffer);
+      gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, ombroVertexColorBuffer.itemSize, gl.FLOAT, false, 0, 0);
+      setMatrixUniforms();
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, ombroVertexPositionBuffer.numItems);
+      //desenhar braço
+      mat4.translate(mMatrix, mMatrix, [8.0,-2.0,0.0]);
+      gl.bindBuffer(gl.ARRAY_BUFFER, braçoVertexPositionBuffer);
+      gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, braçoVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, braçoVertexColorBuffer);
+      gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, braçoVertexColorBuffer.itemSize, gl.FLOAT, false, 0, 0);
+      setMatrixUniforms();
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, braçoVertexPositionBuffer.numItems);
+      //desenhar braço 2
+      mat4.translate(mMatrix, mMatrix, [-7.7,0.0,0.0]);
+      gl.bindBuffer(gl.ARRAY_BUFFER, braçoVertexPositionBuffer);
+      gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, braçoVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, braçoVertexColorBuffer);
+      gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, braçoVertexColorBuffer.itemSize, gl.FLOAT, false, 0, 0);
+      setMatrixUniforms();
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, braçoVertexPositionBuffer.numItems);
+    }
+
+    function setMatrixUniforms() {
+      gl.uniformMatrix4fv(shaderProgram.pMatrixUniform,
+        false, pMatrix);
+      gl.uniformMatrix4fv(shaderProgram.vMatrixUniform,
+        false, vMatrix);
+      gl.uniformMatrix4fv(shaderProgram.mMatrixUniform,
+        false, mMatrix);
+    }
+  </script>
+  <script id="shader-vs" type="x-shader/x-vertex">
+    attribute vec3 aVertexPosition;
+    attribute vec4 aVertexColor;
+
+    uniform mat4 uMMatrix;
+    uniform mat4 uVMatrix;
+    uniform mat4 uPMatrix;
+    
+    varying vec4 vColor;
+
+    void main(void)
+    {
+gl_Position = uPMatrix * uVMatrix * uMMatrix * vec4(aVertexPosition, 1.0);
+vColor = aVertexColor;
+    }
+  </script>
+  <script id="shader-fs" type="x-shader/x-fragment">
+    precision mediump float;
+    varying vec4 vColor;
+
+    void main(void)
+    {
+gl_FragColor = vColor;
+    }
+    
+  </script>
+
+</head>
+
+<body>
+  <canvas id="canvas-webgl" width="500px" height="500px" style="border:none">
+  </canvas>
+</body>
+
+</html>
